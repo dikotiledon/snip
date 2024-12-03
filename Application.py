@@ -1,14 +1,20 @@
 from tkinter import *
 import pyautogui
+import cv2
 import datetime
 import os
+from PIL import Image, ImageTk
 
 def take_bounded_screenshot(x1, y1, x2, y2):
     if not os.path.exists("snips"):
         os.makedirs("snips")
     image = pyautogui.screenshot(region=(int(x1), int(y1), int(x2), int(y2)))
     file_name = datetime.datetime.now().strftime("%f")
-    image.save("snips/" + file_name + ".png")
+    # image.save("snips/" + file_name + ".png")
+    image.save(file_name + ".png")
+    file_name = file_name+".png"
+    location = pyautogui.locateCenterOnScreen(file_name, confidence=0.9)
+    print(location)
 
 class Application():
     def __init__(self, master):
@@ -21,7 +27,7 @@ class Application():
         self.rect = None
 
         self.master.geometry('400x50+200+200')  # set new geometry
-        self.master.title('Lil Snippy')
+        self.master.title('Snip')
 
         self.menu_frame = Frame(master)
         self.menu_frame.pack(fill=BOTH, expand=YES, padx=1, pady=1)
@@ -55,22 +61,22 @@ class Application():
         self.master_screen.attributes("-topmost", True)
 
     def on_button_release(self, event):
-        self.display_rectangle_position()
+        # self.display_rectangle_position()
 
         if self.start_x <= self.current_x and self.start_y <= self.current_y:
-            print("right down")
+            # print("right down")
             take_bounded_screenshot(self.start_x, self.start_y, self.current_x - self.start_x, self.current_y - self.start_y)
 
         elif self.start_x >= self.current_x and self.start_y <= self.current_y:
-            print("left down")
+            # print("left down")
             take_bounded_screenshot(self.current_x, self.start_y, self.start_x - self.current_x, self.current_y - self.start_y)
 
         elif self.start_x <= self.current_x and self.start_y >= self.current_y:
-            print("right up")
+            # print("right up")
             take_bounded_screenshot(self.start_x, self.current_y, self.current_x - self.start_x, self.start_y - self.current_y)
 
         elif self.start_x >= self.current_x and self.start_y >= self.current_y:
-            print("left up")
+            # print("left up")
             take_bounded_screenshot(self.current_x, self.current_y, self.start_x - self.current_x, self.start_y - self.current_y)
 
         self.exit_screenshot_mode()
@@ -92,11 +98,11 @@ class Application():
         # expand rectangle as you drag the mouse
         self.snip_surface.coords(self.rect, self.start_x, self.start_y, self.current_x, self.current_y)
 
-    def display_rectangle_position(self):
-        print(self.start_x)
-        print(self.start_y)
-        print(self.current_x)
-        print(self.current_y)
+    # def display_rectangle_position(self):
+    #     print(self.start_x)
+    #     print(self.start_y)
+    #     print(self.current_x)
+    #     print(self.current_y)
 
 if __name__ == '__main__':
     root = Tk()

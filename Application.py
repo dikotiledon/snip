@@ -191,13 +191,13 @@ class MultiTracker:
             
             # Perform OCR on the image
             pil_image = Image.open(filepath)
-            ocr_text = pytesseract.image_to_string(pil_image).strip()
+            # ocr_text = pytesseract.image_to_string(pil_image).strip()
 
             # Store image details
             self.tracking_images.append({
                 'filepath': filepath,
-                'cv_image': cv_image,
-                'ocr_text': ocr_text
+                'cv_image': cv_image
+                # ,'ocr_text': ocr_text]
             })
 
             # Update listbox
@@ -251,19 +251,30 @@ class MultiTracker:
                 # Track each image
                 for image_data in self.tracking_images:
                     filepath = image_data['filepath']
-                    ocr_text = image_data['ocr_text']
+                    # ocr_text = image_data['ocr_text']
 
                     # Try to locate the image on screen
                     try:
                         location = pyautogui.locateCenterOnScreen(
                             filepath, 
-                            confidence=0.9
+                            grayscale=True,
+                            confidence=0.8
                         )
                         
                         if location:
                             x, y = location
                             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            print(x,y)
                             
+                            # start_x = int(min(self.start_x, self.current_x))
+                            # start_y = int(min(self.start_y, self.current_y))
+                            # width = int(abs(self.current_x - self.start_x))
+                            # height = int(abs(self.current_y - self.start_y))
+                            
+                            # screenshot = pyautogui.screenshot(region=(x - 10, y - 10, 20, 20))
+
+                            # Perform OCR on the captured region
+                            # ocr_text = pytesseract.image_to_string(screenshot)
                             # Construct result message
                             result_msg = (
                                 f"{timestamp}: "
@@ -272,8 +283,8 @@ class MultiTracker:
                             )
                             
                             # Add OCR text if available
-                            if ocr_text:
-                                result_msg += f"OCR Text: {ocr_text}\n"
+                            # if ocr_text:
+                            #     result_msg += f"OCR Text: {ocr_text}\n"
                             
                             # Update results in main thread
                             self.update_results(result_msg)
@@ -283,9 +294,10 @@ class MultiTracker:
                         pass
                 
                 # Wait before next scan
-                time.sleep(2)
+                time.sleep(0.5)
             
             except Exception as e:
+                print(e)
                 # Log any unexpected errors
                 error_msg = f"Tracking error: {str(e)}\n"
                 self.update_results(error_msg)

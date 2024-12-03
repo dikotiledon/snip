@@ -1,62 +1,108 @@
+import threading
 import tkinter as tk
+from tkinter import messagebox, filedialog
+import pystray
 import pyautogui
 import cv2
 import datetime
 import os
-from PIL import Image, ImageTk
 import numpy as np
 import threading
 import time
+import pytesseract
+from PIL import Image
 
-class Application:
+# Ensure Tesseract OCR path is set correctly
+# You may need to adjust this path based on your Tesseract installation
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+class MultiTracker:
     def __init__(self, master):
         self.master = master
+        self.master.title("Multi-Image Tracker with Snipping")
+        self.master.geometry('600x800+100+100')
+        self.master.protocol('WM_DELETE_WINDOW', self.minimize_to_tray)
+        
+        # Snipping related attributes
         self.snip_surface = None
         self.start_x = None
         self.start_y = None
         self.current_x = None
         self.current_y = None
         self.rect = None
-        self.tracking_image = None
-        self.tracking_active = False
+
+        # Tracking images and their details
+        self.tracking_images = []
         
-        # Setup main window
-        self.master.geometry('400x200+200+200')
-        self.master.title('Screen Tracker')
-        
-        # Create frames and buttons
-        self.menu_frame = tk.Frame(master)
-        self.menu_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        self.snip_button = tk.Button(
-            self.menu_frame, 
-            text="Select Region", 
-            command=self.create_screen_canvas, 
-            bg="green", 
+        # UI Components
+        self.setup_ui()
+
+
+
+    def setup_ui(self):
+        # Main frame
+        main_frame = tk.Frame(self.master)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Buttons frame
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+
+        # Snip Button
+        snip_btn = tk.Button(
+            button_frame, 
+            text="Snip Screen", 
+            command=self.create_screen_canvas,
+            bg="green",
             fg="white"
         )
-        self.snip_button.pack(pady=10)
-        
-        self.track_button = tk.Button(
-            self.menu_frame, 
+        snip_btn.pack(side=tk.LEFT, padx=5)
+
+        # Add Image Button
+        add_image_btn = tk.Button(
+            button_frame, 
+            text="Add Image", 
+            command=self.add_tracking_image,
+            bg="blue",
+            fg="white"
+        )
+        add_image_btn.pack(side=tk.LEFT, padx=5)
+
+        # Start Tracking Button
+        self.track_btn = tk.Button(
+            button_frame, 
             text="Start Tracking", 
-            command=self.toggle_tracking, 
-            bg="blue", 
-            fg="white", 
+            command=self.toggle_tracking,
+            bg="blue",
+            fg="white",
             state=tk.DISABLED
         )
-        self.track_button.pack(pady=10)
-        
-        # Text area to display coordinates
-        self.coord_text = tk.Text(
-            self.menu_frame, 
-            height=10, 
-            width=50
+        self.track_btn.pack(side=tk.LEFT, padx=5)
+        # Minimize to tray Button
+        minimize_to_tray_btn = tk.Button(
+            button_frame, 
+            text="Minimize to tray", 
+            command=self.minimize_to_tray,
+            bg="green",
+            fg="white"
         )
-        self.coord_text.pack(pady=10)
+        minimize_to_tray_btn.pack(side=tk.RIGHT, padx=5)
+
         
+        # Images Listbox
+        self.images_listbox = tk.Listbox(main_frame, height=10)
+        self.images_listbox.pack(fill=tk.X, pady=10)
+
+        # Results Text Area
+        self.results_text = tk.Text(main_frame, height=20)
+        self.results_text.pack(fill=tk.BOTH, expand=True)
+
+        # Tracking state
+        self.tracking_active = False
+        self.tracking_thread = None
+
         # Prepare full-screen overlay
-        self.master_screen = tk.Toplevel(master)
+        self.master_screen = tk.Toplevel(self.master)
         self.master_screen.withdraw()
         self.master_screen.attributes("-transparent", "maroon3")
         
@@ -64,10 +110,6 @@ class Application:
         self.picture_frame.pack(fill=tk.BOTH, expand=True)
 
     def create_screen_canvas(self):
-        # Reset previous tracking
-        self.tracking_image = None
-        self.track_button.config(state=tk.DISABLED)
-        
         # Show full-screen overlay for snipping
         self.master_screen.deiconify()
         self.master.withdraw()
@@ -136,12 +178,49 @@ class Application:
         filepath = os.path.join("snips", filename)
         screenshot.save(filepath)
         
-        # Save screenshot image for tracking
-        self.tracking_image = cv2.imread(filepath)
+        # Process the snipped image
+        self.process_snipped_image(filepath)
         
-        # Exit screenshot mode and re-enable tracking
+        # Exit screenshot mode
         self.exit_screenshot_mode()
-        self.track_button.config(state=tk.NORMAL)
+
+    def process_snipped_image(self, filepath):
+        try:
+            # Read image with OpenCV
+            cv_image = cv2.imread(filepath)
+            
+            # Perform OCR on the image
+            pil_image = Image.open(filepath)
+            ocr_text = pytesseract.image_to_string(pil_image).strip()
+
+            # Store image details
+            self.tracking_images.append({
+                'filepath': filepath,
+                'cv_image': cv_image,
+                'ocr_text': ocr_text
+            })
+
+            # Update listbox
+            self.images_listbox.insert(tk.END, os.path.basename(filepath))
+
+            # Enable tracking button if images are added
+            self.track_btn.config(state=tk.NORMAL)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not process snipped image: {str(e)}")
+
+    def add_tracking_image(self):
+        # Open file dialog to select image
+        filepath = filedialog.askopenfilename(
+            title="Select Tracking Image",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp *.gif")]
+        )
+        
+        if not filepath:
+            return
+
+        # Process selected image
+        self.process_snipped_image(filepath)
 
     def exit_screenshot_mode(self):
         # Clean up screen overlay
@@ -150,50 +229,92 @@ class Application:
         self.master.deiconify()
 
     def toggle_tracking(self):
-        if not self.tracking_active and self.tracking_image is not None:
+        if not self.tracking_active and self.tracking_images:
             # Start tracking
             self.tracking_active = True
-            self.track_button.config(text="Stop Tracking", bg="red")
-            self.tracking_thread = threading.Thread(target=self.track_movement)
+            self.track_btn.config(text="Stop Tracking", bg="red", fg="white")
+            
+            # Clear previous results
+            self.results_text.delete(1.0, tk.END)
+            
+            # Start tracking thread
+            self.tracking_thread = threading.Thread(target=self.track_multiple_images)
             self.tracking_thread.start()
         else:
             # Stop tracking
             self.tracking_active = False
-            self.track_button.config(text="Start Tracking", bg="blue")
+            self.track_btn.config(text="Start Tracking", bg="blue", fg="white")
 
-    def track_movement(self):
+    def track_multiple_images(self):
         while self.tracking_active:
             try:
-                # Find image on screen
-                location = pyautogui.locateCenterOnScreen(
-                    self.tracking_image, 
-                    confidence=0.9
-                )
-                
-                if location:
-                    x, y = location
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                # Track each image
+                for image_data in self.tracking_images:
+                    filepath = image_data['filepath']
+                    ocr_text = image_data['ocr_text']
+
+                    # Try to locate the image on screen
+                    try:
+                        location = pyautogui.locateCenterOnScreen(
+                            filepath, 
+                            confidence=0.9
+                        )
+                        
+                        if location:
+                            x, y = location
+                            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            # Construct result message
+                            result_msg = (
+                                f"{timestamp}: "
+                                f"Image: {os.path.basename(filepath)} "
+                                f"Location: X={x}, Y={y}\n"
+                            )
+                            
+                            # Add OCR text if available
+                            if ocr_text:
+                                result_msg += f"OCR Text: {ocr_text}\n"
+                            
+                            # Update results in main thread
+                            self.update_results(result_msg)
                     
-                    # Update text area with coordinates
-                    self.coord_text.insert(tk.END, f"{timestamp}: X={x}, Y={y}\n")
-                    self.coord_text.see(tk.END)
+                    except pyautogui.ImageNotFoundException:
+                        # Image not found, log silently
+                        pass
                 
-                time.sleep(1)  # Check every second
+                # Wait before next scan
+                time.sleep(2)
             
-            except pyautogui.ImageNotFoundException:
-                # Image not found
-                self.coord_text.insert(tk.END, "Image not found on screen\n")
-                self.coord_text.see(tk.END)
-                time.sleep(1)
             except Exception as e:
-                # Handle other potential errors
-                self.coord_text.insert(tk.END, f"Error: {str(e)}\n")
-                self.coord_text.see(tk.END)
+                # Log any unexpected errors
+                error_msg = f"Tracking error: {str(e)}\n"
+                self.update_results(error_msg)
                 break
 
+    def update_results(self, message):
+        # Use after method to update UI from thread safely
+        self.master.after(0, self._safe_text_update, message)
+
+    def _safe_text_update(self, message):
+        # Append message to results text
+        self.results_text.insert(tk.END, message)
+        self.results_text.see(tk.END)
+    def minimize_to_tray(self):
+        self.master.withdraw() 
+        image = Image.open("app.ico")
+        menu = (pystray.MenuItem('Quit',  self.quit_window), 
+                pystray.MenuItem('Show',self.show_window))
+        icon = pystray.Icon("name", image, "Application", menu)
+        icon.run()
+    def quit_window(self, icon):
+        icon.stop()
+        self.master.destroy()    
+    def show_window(self, icon):
+        icon.stop()
+        self.master.after(0,self.master.deiconify)     
 def main():
     root = tk.Tk()
-    app = Application(root)
+    app = MultiTracker(root)
     root.mainloop()
 
 if __name__ == '__main__':
